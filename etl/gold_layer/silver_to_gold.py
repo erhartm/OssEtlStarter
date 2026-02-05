@@ -1,0 +1,27 @@
+"""
+Silver to Gold: Create a gold-layer view by joining the mapping table (silver) with the bronze tables.
+This script creates a Spark SQL view, not a physical table.
+"""
+from pyspark.sql import SparkSession
+import os
+
+SQLSERVER_BRONZE_TABLE = os.getenv('SQLSERVER_BRONZE_TABLE', 'etl_sqlserver_table')
+MONGODB_BRONZE_TABLE = os.getenv('MONGODB_BRONZE_TABLE', 'etl_mongo_table')
+MAPPING_TABLE = os.getenv('MAPPING_TABLE', 'silver_mapping_table')
+GOLD_VIEW = os.getenv('GOLD_VIEW', 'gold_silver_joined_view')
+
+spark = SparkSession.builder.getOrCreate()
+
+sqlserver_df = spark.table(SQLSERVER_BRONZE_TABLE)
+mongodb_df = spark.table(MONGODB_BRONZE_TABLE)
+mapping_df = spark.table(MAPPING_TABLE)
+
+# Join mapping table to both sources (customize join keys as needed)
+gold_df = mapping_df \
+    .join(sqlserver_df, mapping_df.sqlserver_id == sqlserver_df.id, 'inner') \
+    .join(mongodb_df, mapping_df.mongodb_id == mongodb_df.id, 'inner')
+
+# Register as a view (not a table)
+gold_df.createOrReplaceTempView(GOLD_VIEW)
+
+print(f"Gold view '{GOLD_VIEW}' created. Query it with: SELECT * FROM {GOLD_VIEW}")

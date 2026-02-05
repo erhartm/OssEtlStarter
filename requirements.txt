@@ -1,0 +1,5 @@
+pyspark
+delta-spark
+pymongo
+# For SQL Server JDBC, download the driver manually or use the below if running on Databricks
+# com.microsoft.sqlserver:mssql-jdbc:12.4.2.jre8

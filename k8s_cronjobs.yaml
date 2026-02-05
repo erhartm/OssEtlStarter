@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etl-mongodb-to-spark
+spec:
+  schedule: "0 * * * *" # Every hour
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: etl-mongodb-to-spark
+            image: your-docker-repo/etl-mongodb-to-spark:latest
+            env:
+            - name: MONGO_URI
+              value: "mongodb://your-mongo-host:27017"
+            - name: MONGO_DB
+              value: "yourdb"
+            - name: MONGO_COLLECTION
+              value: "yourcollection"
+            - name: DELTA_PATH
+              value: "/mnt/etl_output/mongo_data_delta"
+            - name: DELTA_TABLE
+              value: "etl_mongo_table"
+            # Add Spark config as needed
+          restartPolicy: OnFailure
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: etl-sqlserver-to-spark
+spec:
+  schedule: "30 * * * *" # Every hour, 30 min offset
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: etl-sqlserver-to-spark
+            image: your-docker-repo/etl-sqlserver-to-spark:latest
+            env:
+            - name: SQLSERVER_HOST
+              value: "your-sqlserver-host"
+            - name: SQLSERVER_DB
+              value: "yourdb"
+            - name: SQLSERVER_USER
+              value: "youruser"
+            - name: SQLSERVER_PASSWORD
+              value: "yourpassword"
+            - name: SQLSERVER_TABLE
+              value: "dbo.yourtable"
+            - name: DELTA_PATH
+              value: "/mnt/etl_output/sqlserver_data_delta"
+            - name: DELTA_TABLE
+              value: "etl_sqlserver_table"
+            # Add Spark config as needed
+          restartPolicy: OnFailure

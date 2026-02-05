@@ -63,11 +63,43 @@ sqlserver_df = spark.read.format("jdbc").options(**read_options).load()
 transformed_df = sqlserver_df # .select(...)
 
 # Write to Delta Lake format
-transformed_df.write.format("delta").mode("overwrite").save(DELTA_PATH)
 
-# Register Delta table using Spark SQL (persistent in Hive metastore)
+# --- Delta Lake Merge (Upsert) Example ---
+# Replace 'id' with your actual primary key column name
+from delta.tables import DeltaTable
+
+# Register Delta table if not exists
 spark.sql(f"""
 	CREATE TABLE IF NOT EXISTS {DELTA_TABLE}
 	USING DELTA
 	LOCATION '{DELTA_PATH}'
 """)
+
+if DeltaTable.isDeltaTable(spark, DELTA_PATH):
+	delta_table = DeltaTable.forPath(spark, DELTA_PATH)
+	# Perform merge (upsert) into Delta table
+	# Replace 'id' with your actual key column
+	(
+		delta_table.alias("target")
+		.merge(
+			transformed_df.alias("source"),
+			"target.id = source.id"  # TODO: Replace 'id' with your key column
+		)
+		.whenMatchedUpdateAll()
+		.whenNotMatchedInsertAll()
+		.execute()
+	)
+else:
+	# First time: write full data
+	transformed_df.write.format("delta").mode("overwrite").save(DELTA_PATH)
+
+	# Register Delta table in metastore
+	spark.sql(f"""
+		CREATE TABLE IF NOT EXISTS {DELTA_TABLE}
+		USING DELTA
+		LOCATION '{DELTA_PATH}'
+	""")
+
+print("Delta Lake merge (upsert) completed. Replace 'id' with your actual key column.")
+
+spark.stop()

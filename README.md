@@ -56,9 +56,22 @@ Edit `k8s_cronjobs.yaml` with your image names and environment variables (includ
 kubectl apply -f k8s_cronjobs.yaml
 ```
 
-## Notes
-- For Databricks, simply run these scripts as jobs or notebooks. All table management is done using open-source Spark SQL, so you can migrate to open-source Spark/Delta Lake in the future.
-- All connectors and table management are open source (no Databricks-proprietary APIs).
+
+## Delta Lake Merge (Upsert) Boilerplate
+The ETL template scripts for SQL Server, MongoDB, and bronze-to-silver now include a Delta Lake merge (upsert) example. This allows you to efficiently handle new and updated records when running ETL jobs periodically.
+
+- **How it works:**
+   - If the Delta table already exists, the script performs a merge (upsert) using a placeholder key column (e.g., `id`, `_id`, or `sqlserver_id`).
+   - If the table does not exist, it writes the full data and registers the table.
+- **Customization required:**
+   - Replace the placeholder key in the merge condition (e.g., `target.id = source.id`) with your actual primary key column name(s).
+   - Adjust the merge logic as needed for your schema.
+
+See comments in each ETL script for details.
+
+---
+For Databricks, simply run these scripts as jobs or notebooks. All table management is done using open-source Spark SQL, so you can migrate to open-source Spark/Delta Lake in the future.
+All connectors and table management are open source (no Databricks-proprietary APIs).
 
 ## Gold Layer Views
 - Gold-layer scripts create Spark SQL views (not physical tables) for analytics, either by joining bronze tables directly or using the mapping table (silver layer).

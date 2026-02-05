@@ -21,7 +21,9 @@ gold_df = mapping_df \
     .join(sqlserver_df, mapping_df.sqlserver_id == sqlserver_df.id, 'inner') \
     .join(mongodb_df, mapping_df.mongodb_id == mongodb_df.id, 'inner')
 
-# Register as a view (not a table)
+
+# Note: This script creates a Spark SQL view, not a Delta table.
+# Delta Lake merge (upsert) is not applicable for views.
 gold_df.createOrReplaceTempView(GOLD_VIEW)
 
 print(f"Gold view '{GOLD_VIEW}' created. Query it with: SELECT * FROM {GOLD_VIEW}")

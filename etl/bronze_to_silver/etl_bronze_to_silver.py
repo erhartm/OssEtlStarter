@@ -36,14 +36,45 @@ mapping_df = sqlserver_df.join(mongodb_df, sqlserver_df.id == mongodb_df.id, 'in
 # Select only the mapping IDs (customize column names as needed)
 mapping_df = mapping_df.select(sqlserver_df.id.alias("sqlserver_id"), mongodb_df.id.alias("mongodb_id"))
 
-# Write mapping table to Delta Lake (silver layer)
-mapping_df.write.format("delta").mode("overwrite").save(MAPPING_PATH)
 
-# Register mapping table in metastore (persistent)
+# --- Delta Lake Merge (Upsert) Example ---
+# Replace 'sqlserver_id' with your actual primary key column name
+from delta.tables import DeltaTable
+
+# Register Delta table if not exists
 spark.sql(f"""
 	CREATE TABLE IF NOT EXISTS {MAPPING_TABLE}
 	USING DELTA
 	LOCATION '{MAPPING_PATH}'
 """)
+
+if DeltaTable.isDeltaTable(spark, MAPPING_PATH):
+	delta_table = DeltaTable.forPath(spark, MAPPING_PATH)
+	# Perform merge (upsert) into Delta table
+	# Replace 'sqlserver_id' with your actual key column
+	(
+		delta_table.alias("target")
+		.merge(
+			mapping_df.alias("source"),
+			"target.sqlserver_id = source.sqlserver_id"  # TODO: Replace with your key column
+		)
+		.whenMatchedUpdateAll()
+		.whenNotMatchedInsertAll()
+		.execute()
+	)
+else:
+	# First time: write full data
+	mapping_df.write.format("delta").mode("overwrite").save(MAPPING_PATH)
+
+	# Register Delta table in metastore
+	spark.sql(f"""
+		CREATE TABLE IF NOT EXISTS {MAPPING_TABLE}
+		USING DELTA
+		LOCATION '{MAPPING_PATH}'
+	""")
+
+print("Delta Lake merge (upsert) completed. Replace 'sqlserver_id' with your actual key column.")
+
+spark.stop()
 
 spark.stop()

@@ -17,7 +17,9 @@ mongodb_df = spark.table(MONGODB_BRONZE_TABLE)
 # Example: join on 'id' (customize as needed)
 gold_df = sqlserver_df.join(mongodb_df, sqlserver_df.id == mongodb_df.id, 'inner')
 
-# Register as a view (not a table)
+
+# Note: This script creates a Spark SQL view, not a Delta table.
+# Delta Lake merge (upsert) is not applicable for views.
 gold_df.createOrReplaceTempView(GOLD_VIEW)
 
 print(f"Gold view '{GOLD_VIEW}' created. Query it with: SELECT * FROM {GOLD_VIEW}")

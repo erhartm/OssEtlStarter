@@ -3,6 +3,7 @@ ETL pipeline: Extract from SQL Server, load to Databricks Apache Spark (Delta La
 Pure PySpark, OSS connectors only, Databricks-compatible
 """
 from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType # Add more types as needed
 import os
 
 # SQL Server connection parameters (set via env vars or config)
@@ -24,7 +25,18 @@ SQLSERVER_QUERY = os.getenv('SQLSERVER_QUERY', 'dbo.testtable')
 
 # Output Delta path (Databricks-accessible, e.g., DBFS, S3, or ADLS)
 DELTA_PATH = os.getenv('DELTA_PATH', '/mnt/etl_output/sqlserver_data_delta')
-DELTA_TABLE = os.getenv('DELTA_TABLE', 'etl_sqlserver_table')
+
+# --- Unity Catalog Compatibility ---
+# Optionally specify catalog and schema for Unity Catalog, fallback to OSS-compatible table name
+DELTA_CATALOG = os.getenv('DELTA_CATALOG')  # e.g., 'main' or 'my_catalog'
+DELTA_SCHEMA = os.getenv('DELTA_SCHEMA')    # e.g., 'default' or 'my_schema'
+DELTA_TABLE_NAME = os.getenv('DELTA_TABLE', 'etl_sqlserver_table')
+if DELTA_CATALOG and DELTA_SCHEMA:
+	DELTA_TABLE = f"{DELTA_CATALOG}.{DELTA_SCHEMA}.{DELTA_TABLE_NAME}"
+elif DELTA_SCHEMA:
+	DELTA_TABLE = f"{DELTA_SCHEMA}.{DELTA_TABLE_NAME}"
+else:
+	DELTA_TABLE = DELTA_TABLE_NAME
 
 JDBC_URL = f"jdbc:sqlserver://{SQLSERVER_HOST}:{SQLSERVER_PORT};databaseName={SQLSERVER_DB}"
 
@@ -57,10 +69,24 @@ if PARTITION_COLUMN and LOWER_BOUND and UPPER_BOUND and NUM_PARTITIONS:
 	read_options["upperBound"] = UPPER_BOUND
 	read_options["numPartitions"] = NUM_PARTITIONS
 
-sqlserver_df = spark.read.format("jdbc").options(**read_options).load()
+
+# --- Schema Enforcement Boilerplate ---
+# Define your schema here. Replace field names and types as needed.
+example_schema = StructType([
+	StructField("id", IntegerType(), True),
+	StructField("name", StringType(), True),
+	StructField("value", DoubleType(), True)
+	# Add more fields as needed
+])
+
+# Apply schema when reading from SQL Server
+sqlserver_df = spark.read.format("jdbc").options(**read_options).schema(example_schema).load()
+
 
 # Example transformation (identity)
 transformed_df = sqlserver_df # .select(...)
+
+# Note: If your source table schema changes, update 'example_schema' above to match.
 
 # Write to Delta Lake format
 
@@ -68,7 +94,7 @@ transformed_df = sqlserver_df # .select(...)
 # Replace 'id' with your actual primary key column name
 from delta.tables import DeltaTable
 
-# Register Delta table if not exists
+# Register Delta table if not exists (works for Unity Catalog and OSS)
 spark.sql(f"""
 	CREATE TABLE IF NOT EXISTS {DELTA_TABLE}
 	USING DELTA
@@ -87,11 +113,12 @@ if DeltaTable.isDeltaTable(spark, DELTA_PATH):
 		)
 		.whenMatchedUpdateAll()
 		.whenNotMatchedInsertAll()
+		.option("mergeSchema", "true")
 		.execute()
 	)
 else:
 	# First time: write full data
-	transformed_df.write.format("delta").mode("overwrite").save(DELTA_PATH)
+	transformed_df.write.format("delta").option("mergeSchema", "true").mode("overwrite").save(DELTA_PATH)
 
 	# Register Delta table in metastore
 	spark.sql(f"""

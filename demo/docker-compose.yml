@@ -1,0 +1,82 @@
+version: '3.8'
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    environment:
+      SA_PASSWORD: "YourStrong(!)Password"
+      ACCEPT_EULA: "Y"
+    ports:
+      - "1433:1433"
+    volumes:
+      - ./demo-persist/sqlserver:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P YourStrong(!)Password -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:5.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./demo-persist/mongodb:/data/db
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: hivepassword
+      MYSQL_DATABASE: metastore
+      MYSQL_USER: hive
+      MYSQL_PASSWORD: hivepassword
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./demo-data/mysql:/docker-entrypoint-initdb.d
+      - ./demo-persist/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  spark:
+    image: bitnami/spark:3.4.1
+    environment:
+      SPARK_MODE: "master"
+      SPARK_MASTER_HOST: "spark"
+      SPARK_HIVE_METASTORE_HOST: "mysql"
+      SPARK_HIVE_METASTORE_PORT: "3306"
+      SPARK_HIVE_METASTORE_DB: "metastore"
+      SPARK_HIVE_METASTORE_USER: "hive"
+      SPARK_HIVE_METASTORE_PASSWORD: "hivepassword"
+    ports:
+      - "8080:8080"
+      - "4040:4040"
+    volumes:
+      - ./etl:/app/etl
+      - ./demo-data:/app/demo-data
+      - ./demo-env:/app/demo-env
+      - ./demo-persist/spark:/app/persist/spark
+      - ./demo-persist/hive:/app/persist/hive
+      - ./demo-persist/parquet:/app/persist/parquet
+    depends_on:
+      - sqlserver
+      - mongodb
+      - mysql
+    command: ["/bin/bash", "-c", "sleep 40 && spark-submit /app/etl/sqlserver_to_spark/etl_sqlserver_to_spark.py && spark-submit /app/etl/mongodb_to_spark/etl_mongodb_to_spark.py && spark-submit /app/etl/bronze_to_silver/etl_bronze_to_silver.py"]
+
+  client:
+    image: python:3.9
+    volumes:
+      - ./etl:/app/etl
+      - ./demo-env:/app/demo-env
+    working_dir: /app/etl/client
+    depends_on:
+      - spark
+    command: ["python", "read_gold_layer.py"]

@@ -1,3 +1,23 @@
+## Delta Lake Schema Evolution
+All ETL template scripts now support schema evolution using Delta Lake OSS. When you add new columns to your schema in the ETL script, the table schema in the metastore will automatically update to match, thanks to the `mergeSchema` option in write and merge operations.
+
+- **How it works:**
+   - When writing or merging data, the script uses `.option("mergeSchema", "true")` to allow new columns to be added to the Delta table.
+   - The metastore schema will evolve to match your DataFrame’s schema for supported changes (e.g., adding columns).
+- **Customization required:**
+   - Update your ETL script’s schema definition as your source evolves.
+   - For complex schema changes (e.g., dropping columns, changing types), additional Spark SQL or table management may be needed.
+
+See comments in each ETL script for details and instructions.
+## Schema Enforcement Boilerplate
+All ETL template scripts now include a schema enforcement example using PySpark's `StructType`. This allows you to define the expected schema for your source data and ensure that only data matching your structure is loaded.
+
+- **How it works:**
+   - Each script provides a placeholder schema definition (see `example_schema`).
+   - Update the field names and types to match your actual source table or collection.
+   - Apply the schema when reading or transforming data.
+
+See comments in each ETL script for details and instructions.
 # ETL Pipeline Boilerplate: MongoDB/SQL Server to Apache Spark (Databricks)
 
 ## Overview
@@ -13,6 +33,16 @@ This project provides a pure PySpark, open-source ETL template for extracting da
 - `client/.env`: Environment variables for the client (Spark/Databricks connection, view name)
 - `k8s_cronjobs.yaml`: Example Kubernetes CronJob definitions
 - `requirements.txt`: Python dependencies
+
+## Environment Variables for Catalog/Schema Compatibility
+To support both Unity Catalog and OSS Delta Lake, ETL scripts accept optional environment variables:
+- `DELTA_CATALOG`, `DELTA_SCHEMA`, `DELTA_TABLE` (SQL Server/MongoDB ETL)
+- `MAPPING_CATALOG`, `MAPPING_SCHEMA`, `MAPPING_TABLE` (Bronze to Silver ETL)
+If `DELTA_CATALOG` and `DELTA_SCHEMA` are set, tables are registered as `catalog.schema.table` (Unity Catalog). If only `DELTA_SCHEMA` is set, tables are registered as `schema.table` (OSS Hive metastore or Databricks legacy). If neither is set, tables are registered as `table`.
+This ensures maximum compatibility across Databricks Unity Catalog and open-source Spark/Delta Lake.
+
+## Orchestration and Job Triggering
+Each ETL job (bronze, silver, gold) runs independently and does not automatically trigger downstream jobs. You must orchestrate execution using Kubernetes CronJobs, Databricks Jobs, Airflow, Prefect, or another workflow manager if you want automatic dependencies or chaining.
 
 ## Prerequisites
 - Python 3.8+
